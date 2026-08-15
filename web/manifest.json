@@ -1,6 +1,6 @@
 {
-    "name": "scene_app",
-    "short_name": "scene_app",
+    "name": "Turbo Runner",
+    "short_name": "Turbo Runner",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -1,5 +1,6 @@
 // ignore_for_file: avoid_print
 import 'dart:math' as math;
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -103,7 +104,7 @@ void main() {
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
-  print('[Boot] Starting Turbo Car Runner 3D with Impeller & Flutter Scene...');
+  print('[Boot] Starting Turbo Runner with Impeller & Flutter Scene...');
   runApp(const CarRunnerApp());
 }
 
@@ -113,7 +114,7 @@ class CarRunnerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Turbo Car Runner 3D',
+      title: 'Turbo Runner',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF04060C),
@@ -134,7 +135,8 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateMixin {
+class _GameScreenState extends State<GameScreen>
+    with SingleTickerProviderStateMixin {
   // 3D Scene Graph
   final Scene _scene = Scene();
   Node? _playerCarNode;
@@ -145,10 +147,17 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
   final List<RoadSegment> _roadSegments = [];
   final List<StreetLamp> _streetLamps = [];
 
+  // Audio Players & Sound Settings
+  final AudioPlayer _bgmPlayer = AudioPlayer();
+  final AudioPlayer _sfxPlayer = AudioPlayer();
+  double _bgmVolume = 0.6; // 60% default sound
+  bool _isMuted = false;
+
   // Road Dimensions (32 tiles × 4.0 units = 128.0 units span)
   static const int _tileCount = 32;
   static const double _tileLength = 4.0;
-  static const double _roadWidth = 8.0; // Wide highway covering 3 lanes + shoulders
+  static const double _roadWidth =
+      8.0; // Wide highway covering 3 lanes + shoulders
   static const double _totalRoadSpan = _tileCount * _tileLength;
 
   // Gameplay State
@@ -179,7 +188,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
 
   // Continuous Spawner Distance Counters
   double _distanceUntilNextObstacle = 10.0; // Initial gap before 1st obstacle
-  double _distanceUntilNextCoin = 5.0;      // Initial gap before 1st coin cluster
+  double _distanceUntilNextCoin = 5.0; // Initial gap before 1st coin cluster
   final math.Random _random = math.Random();
   late Ticker _gameLoopTicker;
   late final FocusNode _focusNode;
@@ -194,18 +203,38 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     'box': 'assets/kenney_car-kit/Models/GLB format/box.glb',
   };
 
-  static const Set<String> _trafficVehicleTypes = {'truck', 'police', 'taxi', 'delivery'};
+  static const Set<String> _trafficVehicleTypes = {
+    'truck',
+    'police',
+    'taxi',
+    'delivery',
+  };
 
   @override
   void initState() {
     super.initState();
     _focusNode = FocusNode();
     _gameLoopTicker = createTicker(_onGameTick);
+    _initAudio();
     _initialize3DGame();
+  }
+
+  Future<void> _initAudio() async {
+    try {
+      await _bgmPlayer.setReleaseMode(ReleaseMode.loop);
+      await _bgmPlayer.setVolume(_bgmVolume);
+      await _bgmPlayer.play(AssetSource('subway.mp3'));
+      print('[Audio] Background music subway.mp3 playing at 60% default volume.');
+    } catch (e) {
+      print('[Audio Error] $e');
+    }
   }
 
   @override
   void dispose() {
+    _bgmPlayer.stop();
+    _bgmPlayer.dispose();
+    _sfxPlayer.dispose();
     _focusNode.dispose();
     _gameLoopTicker.dispose();
     super.dispose();
@@ -243,23 +272,25 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
       for (final entry in _obstacleModelPaths.entries) {
         for (int i = 0; i < 3; i++) {
           final node = await Node.fromGlbAsset(entry.value);
-          node.localTransform = vm.Matrix4.identity()..setTranslationRaw(0, -200, 0);
+          node.localTransform = vm.Matrix4.identity()
+            ..setTranslationRaw(0, -200, 0);
           _scene.add(node);
           _obstacleSlots.add(ObstacleSlot(node: node, type: entry.key));
         }
       }
       print('[3D Loader] ${_obstacleSlots.length} obstacle slots pre-loaded.');
 
-      // 4. Pre-load Coin Slots (18 coins total = 6 clusters of 3)
+      // 4. Pre-load Golden Coin Slots (18 coins total = 6 clusters of 3)
       for (int i = 0; i < 18; i++) {
         final node = await Node.fromGlbAsset(
-          'assets/kenney_car-kit/Models/GLB format/debris-nut.glb',
+          'assets/gold-coin.glb',
         );
-        node.localTransform = vm.Matrix4.identity()..setTranslationRaw(0, -200, 0);
+        node.localTransform = vm.Matrix4.identity()
+          ..setTranslationRaw(0, -200, 0);
         _scene.add(node);
         _coinSlots.add(CoinSlot(node: node));
       }
-      print('[3D Loader] ${_coinSlots.length} coin slots pre-loaded.');
+      print('[3D Loader] ${_coinSlots.length} golden coin slots pre-loaded.');
 
       // 5. Build Seamless 3D Continuous Highway
       print('[3D Loader] Building 3D Highway ($_tileCount segments)...');
@@ -290,7 +321,13 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
             ..rotateY(-math.pi * 0.5)
             ..scaleByVector3(vm.Vector3(1.8, 1.8, 1.8));
           _scene.add(leftLampNode);
-          _streetLamps.add(StreetLamp(node: leftLampNode, pos: leftLampPos, rotY: -math.pi * 0.5));
+          _streetLamps.add(
+            StreetLamp(
+              node: leftLampNode,
+              pos: leftLampPos,
+              rotY: -math.pi * 0.5,
+            ),
+          );
 
           // Right lamp
           final rightLampNode = await Node.fromGlbAsset(
@@ -302,7 +339,13 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
             ..rotateY(math.pi * 0.5)
             ..scaleByVector3(vm.Vector3(1.8, 1.8, 1.8));
           _scene.add(rightLampNode);
-          _streetLamps.add(StreetLamp(node: rightLampNode, pos: rightLampPos, rotY: math.pi * 0.5));
+          _streetLamps.add(
+            StreetLamp(
+              node: rightLampNode,
+              pos: rightLampPos,
+              rotY: math.pi * 0.5,
+            ),
+          );
         }
       }
 
@@ -352,7 +395,9 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
   }
 
   void _triggerGameOver(String obstacleType) {
-    print('[Crash] Hit $obstacleType at ${_distanceTraveled.toStringAsFixed(0)}m! Final Score: $_score');
+    print(
+      '[Crash] Hit $obstacleType at ${_distanceTraveled.toStringAsFixed(0)}m! Final Score: $_score',
+    );
     _gameLoopTicker.stop();
     if (_score > _highScore) {
       _highScore = _score;
@@ -507,13 +552,17 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
       final bool isVehicle = _trafficVehicleTypes.contains(chosenType);
 
       // Find an inactive slot of this type
-      final slot = _obstacleSlots.where((s) => !s.active && s.type == chosenType).firstOrNull;
+      final slot = _obstacleSlots
+          .where((s) => !s.active && s.type == chosenType)
+          .firstOrNull;
       if (slot != null) {
         slot.active = true;
         const double spawnDepthZ = -70.0; // Spawn far on the horizon
         slot.pos = vm.Vector3(chosenLane.x, 0.0, spawnDepthZ);
         slot.hitRadius = isVehicle ? 1.3 : 0.7;
-        slot.oncomingSpeed = isVehicle ? 0.15 : 0.0; // Oncoming traffic drives towards player
+        slot.oncomingSpeed = isVehicle
+            ? 0.15
+            : 0.0; // Oncoming traffic drives towards player
 
         final scale = isVehicle ? 1.0 : 1.4;
         final rotY = isVehicle ? 0.0 : math.pi;
@@ -523,7 +572,9 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
           ..rotateY(rotY)
           ..scaleByVector3(vm.Vector3(scale, scale, scale));
 
-        print('[Spawner] Spawned $chosenType in ${chosenLane.name.toUpperCase()} lane at Z = $spawnDepthZ');
+        print(
+          '[Spawner] Spawned $chosenType in ${chosenLane.name.toUpperCase()} lane at Z = $spawnDepthZ',
+        );
       }
 
       // Reset distance to next obstacle (18m to 32m interval for constant action!)
@@ -550,7 +601,9 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
           ..scaleByVector3(vm.Vector3(2.2, 2.2, 2.2));
       }
 
-      print('[Spawner] Spawned coin cluster in ${coinLane.name.toUpperCase()} lane at Z = $coinSpawnZ');
+      print(
+        '[Spawner] Spawned coin cluster in ${coinLane.name.toUpperCase()} lane at Z = $coinSpawnZ',
+      );
       _distanceUntilNextCoin = 22.0 + _random.nextDouble() * 16.0;
     }
   }
@@ -581,7 +634,8 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
       const double playerLength = 1.8;
       const double playerWidth = 0.9;
 
-      if (deltaZ < playerLength && deltaX < (playerWidth + slot.hitRadius * 0.45)) {
+      if (deltaZ < playerLength &&
+          deltaX < (playerWidth + slot.hitRadius * 0.45)) {
         final bool isLowObstacle = (slot.type == 'cone' || slot.type == 'box');
         if (isLowObstacle && _playerY > 0.85) {
           // Successfully jumped over low obstacle!
@@ -618,7 +672,12 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
       if (deltaZ < 1.3 && deltaX < 1.0 && deltaY < 1.3) {
         _coinsCollected++;
         _score += 50;
-        print('[Pickup] Gold collected! Coins: $_coinsCollected, Score: $_score');
+        if (!_isMuted) {
+          _sfxPlayer.play(AssetSource('coin.mp3'), volume: 0.9);
+        }
+        print(
+          '[Pickup] Gold collected! Coins: $_coinsCollected, Score: $_score',
+        );
         slot.park();
         continue;
       }
@@ -672,7 +731,8 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
         final double screenWidth = constraints.maxWidth;
         final double screenHeight = constraints.maxHeight;
         final bool isPortrait = screenHeight > screenWidth;
-        final double aspect = screenWidth / (screenHeight > 0 ? screenHeight : 1.0);
+        final double aspect =
+            screenWidth / (screenHeight > 0 ? screenHeight : 1.0);
         final bool isNarrow = screenWidth < 420;
         final bool isShortHeight = screenHeight < 520;
         final bool isDesktopLayout = screenWidth >= 600 && !isShortHeight;
@@ -691,17 +751,21 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
             onKeyEvent: (e) {
               if (e is! KeyDownEvent) return;
               final k = e.logicalKey;
-              if (k == LogicalKeyboardKey.arrowLeft || k == LogicalKeyboardKey.keyA) {
+              if (k == LogicalKeyboardKey.arrowLeft ||
+                  k == LogicalKeyboardKey.keyA) {
                 _moveLeft();
-              } else if (k == LogicalKeyboardKey.arrowRight || k == LogicalKeyboardKey.keyD) {
+              } else if (k == LogicalKeyboardKey.arrowRight ||
+                  k == LogicalKeyboardKey.keyD) {
                 _moveRight();
               } else if (k == LogicalKeyboardKey.arrowUp ||
                   k == LogicalKeyboardKey.space ||
                   k == LogicalKeyboardKey.keyW) {
                 _jump();
-              } else if (k == LogicalKeyboardKey.arrowDown || k == LogicalKeyboardKey.keyS) {
+              } else if (k == LogicalKeyboardKey.arrowDown ||
+                  k == LogicalKeyboardKey.keyS) {
                 _quickDrop();
-              } else if (k == LogicalKeyboardKey.escape || k == LogicalKeyboardKey.keyP) {
+              } else if (k == LogicalKeyboardKey.escape ||
+                  k == LogicalKeyboardKey.keyP) {
                 _togglePause();
               }
             },
@@ -723,10 +787,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                 children: [
                   // Sky Background Image from assets
                   Positioned.fill(
-                    child: Image.asset(
-                      'assets/sky.jpg',
-                      fit: BoxFit.cover,
-                    ),
+                    child: Image.asset('assets/sky.jpg', fit: BoxFit.cover),
                   ),
 
                   // 3D Scene Viewport with dynamic aspect-ratio camera
@@ -734,12 +795,17 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                     _scene,
                     camera: PerspectiveCamera(
                       position: vm.Vector3(_playerCurrentX * 0.18, camY, camZ),
-                      target: vm.Vector3(_playerCurrentX * 0.18, camTargetY, -22.0),
+                      target: vm.Vector3(
+                        _playerCurrentX * 0.18,
+                        camTargetY,
+                        -22.0,
+                      ),
                     ),
                   ),
 
                   // Responsive In-Game HUD
-                  if (_gameState == GameState.playing || _gameState == GameState.paused)
+                  if (_gameState == GameState.playing ||
+                      _gameState == GameState.paused)
                     _buildResponsiveHUD(screenWidth, isNarrow, isShortHeight),
 
                   // Responsive On-Screen Controls during gameplay
@@ -750,15 +816,31 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
 
                   // Start Menu Overlay
                   if (_gameState == GameState.menu)
-                    _buildMenuOverlay(screenWidth, screenHeight, isNarrow, isShortHeight, isPortrait),
+                    _buildMenuOverlay(
+                      screenWidth,
+                      screenHeight,
+                      isNarrow,
+                      isShortHeight,
+                      isPortrait,
+                    ),
 
                   // Game Paused Overlay
                   if (_gameState == GameState.paused)
-                    _buildPausedOverlay(screenWidth, screenHeight, isNarrow, isShortHeight),
+                    _buildPausedOverlay(
+                      screenWidth,
+                      screenHeight,
+                      isNarrow,
+                      isShortHeight,
+                    ),
 
                   // Game Over Overlay
                   if (_gameState == GameState.gameOver)
-                    _buildGameOverOverlay(screenWidth, screenHeight, isNarrow, isShortHeight),
+                    _buildGameOverOverlay(
+                      screenWidth,
+                      screenHeight,
+                      isNarrow,
+                      isShortHeight,
+                    ),
                 ],
               ),
             ),
@@ -772,7 +854,11 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
   // RESPONSIVE 2D UI OVERLAYS & CONTROLS
   // ==========================================================================
 
-  Widget _buildResponsiveHUD(double screenWidth, bool isNarrow, bool isShortHeight) {
+  Widget _buildResponsiveHUD(
+    double screenWidth,
+    bool isNarrow,
+    bool isShortHeight,
+  ) {
     return Positioned(
       top: 0,
       left: 0,
@@ -799,7 +885,9 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.78),
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.amber.withValues(alpha: 0.45)),
+                      border: Border.all(
+                        color: Colors.amber.withValues(alpha: 0.45),
+                      ),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.amber.withValues(alpha: 0.15),
@@ -822,7 +910,11 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                           ),
                         ),
                         SizedBox(width: isNarrow ? 8 : 14),
-                        const Icon(Icons.monetization_on, color: Colors.amberAccent, size: 18),
+                        const Icon(
+                          Icons.monetization_on,
+                          color: Colors.amberAccent,
+                          size: 18,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           '$_coinsCollected',
@@ -833,7 +925,11 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                           ),
                         ),
                         SizedBox(width: isNarrow ? 8 : 14),
-                        const Icon(Icons.stars, color: Colors.orangeAccent, size: 18),
+                        const Icon(
+                          Icons.stars,
+                          color: Colors.orangeAccent,
+                          size: 18,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           '$_score',
@@ -845,7 +941,11 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                         ),
                         if (_highScore > 0 && screenWidth > 500) ...[
                           const SizedBox(width: 14),
-                          const Icon(Icons.emoji_events, color: Colors.yellowAccent, size: 18),
+                          const Icon(
+                            Icons.emoji_events,
+                            color: Colors.yellowAccent,
+                            size: 18,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             'BEST: $_highScore',
@@ -862,25 +962,155 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                 ),
               ),
               const SizedBox(width: 10),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Volume Button
+                  IconButton(
+                    icon: Icon(
+                      _isMuted || _bgmVolume == 0
+                          ? Icons.volume_off
+                          : (_bgmVolume < 0.5 ? Icons.volume_down : Icons.volume_up),
+                      color: Colors.white,
+                      size: isNarrow ? 22 : 26,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.black.withValues(alpha: 0.75),
+                      side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                      padding: EdgeInsets.all(isNarrow ? 8 : 10),
+                    ),
+                    onPressed: _showVolumeDialog,
+                  ),
+                  const SizedBox(width: 8),
 
-              // Pause / Play Button
-              IconButton(
-                icon: Icon(
-                  _gameState == GameState.paused ? Icons.play_arrow : Icons.pause,
-                  color: Colors.white,
-                  size: isNarrow ? 22 : 26,
-                ),
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.black.withValues(alpha: 0.75),
-                  side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                  padding: EdgeInsets.all(isNarrow ? 8 : 10),
-                ),
-                onPressed: _togglePause,
+                  // Pause / Play Button
+                  IconButton(
+                    icon: Icon(
+                      _gameState == GameState.paused
+                          ? Icons.play_arrow
+                          : Icons.pause,
+                      color: Colors.white,
+                      size: isNarrow ? 22 : 26,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.black.withValues(alpha: 0.75),
+                      side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                      padding: EdgeInsets.all(isNarrow ? 8 : 10),
+                    ),
+                    onPressed: _togglePause,
+                  ),
+                ],
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  void _showVolumeDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF101726),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+                side: BorderSide(
+                  color: Colors.amber.withValues(alpha: 0.4),
+                  width: 1.5,
+                ),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.music_note, color: Colors.amber),
+                  SizedBox(width: 8),
+                  Text(
+                    'Sound & Music',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'BGM Volume',
+                        style: TextStyle(color: Colors.white70, fontSize: 15),
+                      ),
+                      Text(
+                        _isMuted ? 'Muted' : '${(_bgmVolume * 100).toInt()}%',
+                        style: const TextStyle(
+                          color: Colors.amberAccent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          _isMuted || _bgmVolume == 0
+                              ? Icons.volume_off
+                              : Icons.volume_up,
+                          color: _isMuted ? Colors.redAccent : Colors.amber,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _isMuted = !_isMuted;
+                            _bgmPlayer.setVolume(_isMuted ? 0.0 : _bgmVolume);
+                          });
+                          setDialogState(() {});
+                        },
+                      ),
+                      Expanded(
+                        child: Slider(
+                          value: _isMuted ? 0.0 : _bgmVolume,
+                          min: 0.0,
+                          max: 1.0,
+                          activeColor: Colors.amber,
+                          inactiveColor: Colors.white24,
+                          onChanged: (val) {
+                            setState(() {
+                              _isMuted = false;
+                              _bgmVolume = val;
+                              _bgmPlayer.setVolume(_bgmVolume);
+                            });
+                            setDialogState(() {});
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text(
+                    'DONE',
+                    style: TextStyle(
+                      color: Colors.amber,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1016,8 +1246,13 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white.withValues(alpha: 0.15),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(25),
+                      ),
                     ),
                     icon: const Icon(Icons.arrow_back, size: 18),
                     label: const Text(''),
@@ -1028,8 +1263,13 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.amber,
                       foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(25),
+                      ),
                       elevation: 6,
                     ),
                     icon: const Icon(Icons.arrow_upward, size: 20),
@@ -1041,8 +1281,13 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white.withValues(alpha: 0.15),
                       foregroundColor: Colors.white70,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(25),
+                      ),
                     ),
                     icon: const Icon(Icons.arrow_downward, size: 18),
                     label: const Text(''),
@@ -1053,8 +1298,13 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white.withValues(alpha: 0.15),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(25),
+                      ),
                     ),
                     icon: const Icon(Icons.arrow_forward, size: 18),
                     label: const Text(''),
@@ -1099,10 +1349,14 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.directions_car_filled, color: Colors.amber, size: iconSize),
+                            Icon(
+                              Icons.directions_car_filled,
+                              color: Colors.amber,
+                              size: iconSize,
+                            ),
                             const SizedBox(height: 6),
                             Text(
-                              'TURBO CAR RUNNER',
+                              'TURBO RUNNER',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: Colors.amber,
@@ -1128,13 +1382,21 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.amber,
                                 foregroundColor: Colors.black,
-                                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 32,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(24),
+                                ),
                               ),
                               icon: const Icon(Icons.play_arrow, size: 24),
                               label: const Text(
                                 'START RACE',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ],
@@ -1165,17 +1427,37 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                                 ),
                               ),
                               SizedBox(height: 8),
-                              Text('• Tap / A-D / Swipe: Switch Lanes',
-                                  style: TextStyle(color: Colors.white70, fontSize: 12)),
+                              Text(
+                                '• Tap / A-D / Swipe: Switch Lanes',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
                               SizedBox(height: 4),
-                              Text('• Jump / Space / Swipe Up: Jump over Obstacles',
-                                  style: TextStyle(color: Colors.white70, fontSize: 12)),
+                              Text(
+                                '• Jump / Space / Swipe Up: Jump over Obstacles',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
                               SizedBox(height: 4),
-                              Text('• Drop / S / Swipe Down: Quick Ground Drop',
-                                  style: TextStyle(color: Colors.white70, fontSize: 12)),
+                              Text(
+                                '• Drop / S / Swipe Down: Quick Ground Drop',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
                               SizedBox(height: 6),
-                              Text('⚡ Dodge oncoming traffic & collect gold nuts!',
-                                  style: TextStyle(color: Colors.amberAccent, fontSize: 12)),
+                              Text(
+                                '⚡ Dodge oncoming traffic & collect gold nuts!',
+                                style: TextStyle(
+                                  color: Colors.amberAccent,
+                                  fontSize: 12,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -1193,7 +1475,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'TURBO CAR RUNNER',
+                        'TURBO RUNNER',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.amber,
@@ -1214,11 +1496,16 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                       if (_highScore > 0) ...[
                         const SizedBox(height: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.amber.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
+                            border: Border.all(
+                              color: Colors.amber.withValues(alpha: 0.5),
+                            ),
                           ),
                           child: Text(
                             '🏆 BEST SCORE: $_highScore',
@@ -1250,22 +1537,40 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                               ),
                             ),
                             const SizedBox(height: 10),
-                            const Text('◀ ▶  Swipe / Tap Buttons or A / D keys to switch lanes',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.white70, fontSize: 13)),
+                            const Text(
+                              '◀ ▶  Swipe / Tap Buttons or A / D keys to switch lanes',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                              ),
+                            ),
                             const SizedBox(height: 6),
-                            const Text('▲  Swipe Up / Tap Jump / SPACE to Jump',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.white70, fontSize: 13)),
+                            const Text(
+                              '▲  Swipe Up / Tap Jump / SPACE to Jump',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                              ),
+                            ),
                             const SizedBox(height: 6),
-                            const Text('▼  Swipe Down / Tap Drop / S to Quick Drop',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.white70, fontSize: 13)),
+                            const Text(
+                              '▼  Swipe Down / Tap Drop / S to Quick Drop',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                              ),
+                            ),
                             const SizedBox(height: 10),
                             const Text(
                               '⚡ Dodge oncoming traffic & collect gold nuts!',
                               textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.amberAccent, fontSize: 13),
+                              style: TextStyle(
+                                color: Colors.amberAccent,
+                                fontSize: 13,
+                              ),
                             ),
                           ],
                         ),
@@ -1280,7 +1585,9 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                             horizontal: isNarrow ? 36 : 48,
                             vertical: isNarrow ? 14 : 18,
                           ),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
                           elevation: 10,
                         ),
                         icon: const Icon(Icons.play_arrow, size: 28),
@@ -1348,10 +1655,15 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                           horizontal: isNarrow ? 24 : 32,
                           vertical: isNarrow ? 12 : 16,
                         ),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
                       ),
                       icon: const Icon(Icons.play_arrow),
-                      label: const Text('RESUME', style: TextStyle(fontWeight: FontWeight.bold)),
+                      label: const Text(
+                        'RESUME',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                     const SizedBox(width: 14),
                     OutlinedButton.icon(
@@ -1363,7 +1675,9 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                           horizontal: isNarrow ? 20 : 28,
                           vertical: isNarrow ? 12 : 16,
                         ),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
                       ),
                       icon: const Icon(Icons.replay),
                       label: const Text('RESTART'),
@@ -1429,7 +1743,10 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                     children: [
                       if (isNewRecord) ...[
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.amber.withValues(alpha: 0.25),
                             borderRadius: BorderRadius.circular(12),
@@ -1437,7 +1754,11 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.emoji_events, color: Colors.yellowAccent, size: 16),
+                              Icon(
+                                Icons.emoji_events,
+                                color: Colors.yellowAccent,
+                                size: 16,
+                              ),
                               SizedBox(width: 5),
                               Text(
                                 'NEW HIGH SCORE!',
@@ -1454,12 +1775,18 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                       ],
                       Text(
                         'DISTANCE: ${_distanceTraveled.toInt()} m',
-                        style: TextStyle(color: Colors.white70, fontSize: isNarrow ? 14 : 16),
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: isNarrow ? 14 : 16,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         'GOLD NUTS: $_coinsCollected',
-                        style: TextStyle(color: Colors.amberAccent, fontSize: isNarrow ? 14 : 16),
+                        style: TextStyle(
+                          color: Colors.amberAccent,
+                          fontSize: isNarrow ? 14 : 16,
+                        ),
                       ),
                       const SizedBox(height: 10),
                       const Divider(color: Colors.white24),
@@ -1475,7 +1802,10 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                       const SizedBox(height: 4),
                       Text(
                         'BEST: $_highScore',
-                        style: const TextStyle(color: Colors.white54, fontSize: 13),
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 13,
+                        ),
                       ),
                     ],
                   ),
@@ -1490,7 +1820,9 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                       horizontal: isNarrow ? 36 : 48,
                       vertical: isNarrow ? 14 : 18,
                     ),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
                     elevation: 10,
                   ),
                   icon: const Icon(Icons.replay, size: 26),
@@ -1537,7 +1869,11 @@ class _ScenePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    scene.render(camera, canvas, viewport: Rect.fromLTWH(0, 0, size.width, size.height));
+    scene.render(
+      camera,
+      canvas,
+      viewport: Rect.fromLTWH(0, 0, size.width, size.height),
+    );
   }
 
   @override

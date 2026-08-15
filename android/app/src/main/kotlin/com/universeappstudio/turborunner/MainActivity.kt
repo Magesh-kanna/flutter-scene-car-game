@@ -1,4 +1,4 @@
-package com.example.scene_app
+package com.universeappstudio.turborunner
 
 import io.flutter.embedding.android.FlutterActivity
 
