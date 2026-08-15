@@ -210,6 +210,8 @@ class _GameScreenState extends State<GameScreen>
     'delivery',
   };
 
+  bool isHideTutorialButtons = false;
+
   @override
   void initState() {
     super.initState();
@@ -217,6 +219,15 @@ class _GameScreenState extends State<GameScreen>
     _gameLoopTicker = createTicker(_onGameTick);
     _initAudio();
     _initialize3DGame();
+
+    // Show tutorial buttons for 3 seconds and then hide them in the UI
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          isHideTutorialButtons = true;
+        });
+      }
+    });
   }
 
   Future<void> _initAudio() async {
@@ -224,7 +235,9 @@ class _GameScreenState extends State<GameScreen>
       await _bgmPlayer.setReleaseMode(ReleaseMode.loop);
       await _bgmPlayer.setVolume(_bgmVolume);
       await _bgmPlayer.play(AssetSource('subway.mp3'));
-      print('[Audio] Background music subway.mp3 playing at 60% default volume.');
+      print(
+        '[Audio] Background music subway.mp3 playing at 60% default volume.',
+      );
     } catch (e) {
       print('[Audio Error] $e');
     }
@@ -282,9 +295,7 @@ class _GameScreenState extends State<GameScreen>
 
       // 4. Pre-load Golden Coin Slots (18 coins total = 6 clusters of 3)
       for (int i = 0; i < 18; i++) {
-        final node = await Node.fromGlbAsset(
-          'assets/gold-coin.glb',
-        );
+        final node = await Node.fromGlbAsset('assets/gold-coin.glb');
         node.localTransform = vm.Matrix4.identity()
           ..setTranslationRaw(0, -200, 0);
         _scene.add(node);
@@ -832,8 +843,8 @@ class _GameScreenState extends State<GameScreen>
                       _gameState == GameState.paused)
                     _buildResponsiveHUD(screenWidth, isNarrow, isShortHeight),
 
-                  // Responsive On-Screen Controls during gameplay
-                  if (_gameState == GameState.playing)
+                  // Responsive On-Screen Controls / Tutorial Buttons during gameplay (shown for 3s then hidden)
+                  if (_gameState == GameState.playing && !isHideTutorialButtons)
                     isDesktopLayout
                         ? _buildDesktopControlButtons()
                         : _buildMobileControlButtons(isNarrow, isShortHeight),
@@ -994,13 +1005,17 @@ class _GameScreenState extends State<GameScreen>
                     icon: Icon(
                       _isMuted || _bgmVolume == 0
                           ? Icons.volume_off
-                          : (_bgmVolume < 0.5 ? Icons.volume_down : Icons.volume_up),
+                          : (_bgmVolume < 0.5
+                                ? Icons.volume_down
+                                : Icons.volume_up),
                       color: Colors.white,
                       size: isNarrow ? 22 : 26,
                     ),
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.black.withValues(alpha: 0.75),
-                      side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.2),
+                      ),
                       padding: EdgeInsets.all(isNarrow ? 8 : 10),
                     ),
                     onPressed: _showVolumeDialog,
@@ -1018,7 +1033,9 @@ class _GameScreenState extends State<GameScreen>
                     ),
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.black.withValues(alpha: 0.75),
-                      side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.2),
+                      ),
                       padding: EdgeInsets.all(isNarrow ? 8 : 10),
                     ),
                     onPressed: _togglePause,
@@ -1427,65 +1444,6 @@ class _GameScreenState extends State<GameScreen>
                         ),
                       ),
                       const SizedBox(width: 24),
-
-                      // Right Column: How to play
-                      Flexible(
-                        flex: 6,
-                        child: Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.white24),
-                          ),
-                          child: const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '🎮 CONTROLS & HOW TO PLAY',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                '• Tap / A-D / Swipe: Switch Lanes',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                '• Jump / Space / Swipe Up: Jump over Obstacles',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                '• Drop / S / Swipe Down: Quick Ground Drop',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              SizedBox(height: 6),
-                              Text(
-                                '⚡ Dodge oncoming traffic & collect gold nuts!',
-                                style: TextStyle(
-                                  color: Colors.amberAccent,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
                     ],
                   )
                 // Standard Portrait / Full Screen Layout
