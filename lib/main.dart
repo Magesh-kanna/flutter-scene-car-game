@@ -164,7 +164,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
   double _playerY = 0.0;
   double _verticalVelocity = 0.0;
   bool _isJumping = false;
-  static const double _playerZ = 0.0; // Fixed player Z anchor
+  static const double _playerZ = -2.0; // Fixed player Z anchor
 
   // Physics constants
   static const double _gravity = -0.016;
@@ -677,12 +677,12 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
         final bool isShortHeight = screenHeight < 520;
         final bool isDesktopLayout = screenWidth >= 600 && !isShortHeight;
 
-        // Dynamic 3D Camera Perspective adjusted for screen aspect ratio
+        // Dynamic 3D Camera Perspective positioned so the player car is completely visible
         final double camZ = isPortrait
-            ? (7.5 + (0.75 - aspect.clamp(0.35, 0.75)) * 3.8)
-            : 7.2;
-        final double camY = isPortrait ? 5.0 : 4.3;
-        final double camTargetY = isPortrait ? 1.1 : 0.8;
+            ? (5.2 + (0.75 - aspect.clamp(0.35, 0.75)) * 2.4)
+            : 4.8;
+        final double camY = isPortrait ? 3.6 : 3.0;
+        final double camTargetY = isPortrait ? 0.8 : 0.5;
 
         return Scaffold(
           body: KeyboardListener(
@@ -721,18 +721,11 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Dynamic Sky Gradient
-                  Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Color(0xFF030509),
-                          Color(0xFF0C1222),
-                          Color(0xFF162038),
-                        ],
-                      ),
+                  // Sky Background Image from assets
+                  Positioned.fill(
+                    child: Image.asset(
+                      'assets/sky.jpg',
+                      fit: BoxFit.cover,
                     ),
                   ),
 
