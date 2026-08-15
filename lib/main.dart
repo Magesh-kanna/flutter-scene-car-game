@@ -1020,10 +1020,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
                     ),
                     icon: const Icon(Icons.arrow_back, size: 18),
-                    label: const Text(
-                      'LEFT [A]',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                    ),
+                    label: const Text(''),
                   ),
                   const SizedBox(width: 10),
                   ElevatedButton.icon(
@@ -1036,10 +1033,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                       elevation: 6,
                     ),
                     icon: const Icon(Icons.arrow_upward, size: 20),
-                    label: const Text(
-                      'JUMP [SPACE]',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
+                    label: const Text(''),
                   ),
                   const SizedBox(width: 10),
                   ElevatedButton.icon(
@@ -1051,10 +1045,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
                     ),
                     icon: const Icon(Icons.arrow_downward, size: 18),
-                    label: const Text(
-                      'DROP [S]',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                    ),
+                    label: const Text(''),
                   ),
                   const SizedBox(width: 10),
                   ElevatedButton.icon(
@@ -1066,10 +1057,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
                     ),
                     icon: const Icon(Icons.arrow_forward, size: 18),
-                    label: const Text(
-                      'RIGHT [D]',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                    ),
+                    label: const Text(''),
                   ),
                 ],
               ),
