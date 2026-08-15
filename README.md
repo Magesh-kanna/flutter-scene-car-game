@@ -57,13 +57,13 @@ Inspired by classic lane runners (like Subway Surfers) with 3D traffic avoidance
 3. Run on your target device (Impeller enabled by default):
    ```bash
    # macOS Desktop
-   flutter run -d macos
+   fvm flutter run -d macos --enable-impeller --enable-flutter-gpu   
 
    # iOS Simulator / Device
-   flutter run -d ios
+   fvm flutter run -d ios --enable-impeller --enable-flutter-gpu
 
    # Android Device
-   flutter run -d android
+   fvm flutter run -d android --enable-impeller --enable-flutter-gpu
    ```
 
 ---
