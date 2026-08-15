@@ -389,6 +389,15 @@ class _GameScreenState extends State<GameScreen>
     _distanceUntilNextObstacle = 12.0; // First obstacle arrives shortly
     _distanceUntilNextCoin = 6.0;
 
+    // Resume BGM when starting a race
+    try {
+      if (!_isMuted) {
+        _bgmPlayer.resume();
+      }
+    } catch (e) {
+      print('[Audio Error] $e');
+    }
+
     _updatePlayerTransform();
     setState(() => _gameState = GameState.playing);
     _gameLoopTicker.start();
@@ -402,15 +411,30 @@ class _GameScreenState extends State<GameScreen>
     if (_score > _highScore) {
       _highScore = _score;
     }
+
+    // Pause BGM and play mario_ending.mp3 once on crash
+    try {
+      _bgmPlayer.pause();
+      if (!_isMuted) {
+        _sfxPlayer.play(AssetSource('mario_ending.mp3'), volume: 0.9);
+      }
+    } catch (e) {
+      print('[Audio Error] $e');
+    }
+
     setState(() => _gameState = GameState.gameOver);
   }
 
   void _togglePause() {
     if (_gameState == GameState.playing) {
       _gameLoopTicker.stop();
+      _bgmPlayer.pause();
       setState(() => _gameState = GameState.paused);
     } else if (_gameState == GameState.paused) {
       _gameLoopTicker.start();
+      if (!_isMuted) {
+        _bgmPlayer.resume();
+      }
       setState(() => _gameState = GameState.playing);
     }
   }
